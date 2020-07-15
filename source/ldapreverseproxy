@@ -1,0 +1,227 @@
+# This Nginx configuration implements an Internet https gateway towards
+# a number of http web servers in the home network.
+# The Internet router must have port forwarding enable towards this gateway
+# for port 9443. Authentication is done with an LDAP server (in my case
+# a Synology LDAP Server application).
+#
+# Change domain, server names, addresses and password to the LDAP server
+# to suit your local installation.
+
+    proxy_cache_path cache/  keys_zone=auth_cache:10m;
+
+    # The back-end daemon listens on port 9000 as implemented
+    # in backend-sample-app.py.
+    # Change the IP address if the daemon is not running on the
+    # same host as NGINX/NGINX Plus.
+    upstream backend {
+        server 127.0.0.1:9000;
+    }
+
+    # NGINX/NGINX Plus listen on port 9443 for requests that require
+    # authentication.
+    # HTTPS 9443
+    server {
+        listen 9443 ssl;
+
+        keepalive_timeout 70;
+
+        # SSL config
+        ssl on;
+
+        # Certificates obtained from Letsencrypt
+        ssl_certificate /etc/letsencrypt/live/<gatewaydomain>/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/<gatewaydomain>/privkey.pem;
+
+        ssl_session_timeout 5m;
+        ssl_protocols SSLv3 TLSv1.2;
+        ssl_ciphers RC4:HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+        ssl_session_cache shared:SSL:10m;
+
+        # Allow to use frame from same origin
+        add_header X-Frame-Options SAMEORIGIN;
+
+        # Proxy Config
+        proxy_redirect          off;
+        proxy_set_header        Host            $host;
+        proxy_set_header        X-Real-IP       $remote_addr;
+        proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+        client_max_body_size    10m;
+        client_body_buffer_size 128k;
+        proxy_connect_timeout   90;
+        proxy_send_timeout      90;
+        proxy_read_timeout      90;
+        proxy_buffers           32 4k;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Define the default site
+        root /var/www/html;
+
+        # Add index.php to the list if you are using PHP
+        #index index.html index.htm index.nginx-debian.html;
+        # only one index for this gateway
+        index indexldap.html;
+
+        server_name _;
+
+        # Protected application
+        location / {
+            auth_request /auth-proxy;
+
+            # redirect 401 to login form
+            # Comment them out if using HTTP basic authentication.
+            # or authentication popup won't show
+            error_page 401 =200 /login;
+
+            # First attempt to serve request as file, then
+            # as directory, then fall back to displaying a 404.
+            try_files $uri $uri/ =404;
+
+            # Backend has a simple test page
+            #proxy_pass http://backend/;
+        }
+
+        location /domoticz.html {
+          auth_request /auth-proxy;
+          error_page 401 =200 /login;
+        }
+
+        location /heatpump/ {
+          auth_request /auth-proxy;
+          error_page 401 =200 /login;
+          proxy_pass http://<homenetwork>.53/;
+        }
+
+        location /weather/ {
+          auth_request /auth-proxy;
+          error_page 401 =200 /login;
+          proxy_pass http://<homenetwork>.54/weewx/;
+        }
+
+        location /energy/ {
+          auth_request /auth-proxy;
+          error_page 401 =200 /login;
+          proxy_pass http://<homenetwork>.52/;
+        }
+
+        location /domoticz/ {
+          auth_request /auth-proxy;
+          error_page 401 =200 /login;
+          proxy_pass http://<homenetwork>.51:8080/;
+        }
+
+        location /garden/ {
+          auth_request /auth-proxy;
+          error_page 401 =200 /login;
+          proxy_pass http://<homenetwork>.57:8080/;
+        }
+
+        location /carheater/ {
+          auth_request /auth-proxy;
+          error_page 401 =200 /login;
+          proxy_pass http://<homenetwork>.51/;
+        }
+
+        location /login {
+            proxy_pass http://backend/login;
+            # Login service returns a redirect to the original URI
+            # and sets the cookie for the ldap-auth daemon
+            proxy_set_header X-Target $request_uri;
+        }
+
+        location = /auth-proxy {
+            internal;
+
+            # The ldap-auth daemon listens on port 8888, as set
+            # in nginx-ldap-auth-daemon.py.
+            # Change the IP address if the daemon is not running on
+            # the same host as NGINX/NGINX Plus.
+            proxy_pass http://127.0.0.1:8888;
+
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+            proxy_cache auth_cache;
+            proxy_cache_valid 200 10m;
+
+            # The following directive adds the cookie to the cache key
+            proxy_cache_key "$http_authorization$cookie_nginxauth";
+
+            # As implemented in nginx-ldap-auth-daemon.py, the ldap-auth daemon
+            # communicates with a LDAP server, passing in the following
+            # parameters to specify which user account to authenticate. To
+            # eliminate the need to modify the Python code, this file contains
+            # 'proxy_set_header' directives that set the values of the
+            # parameters. Set or change them as instructed in the comments.
+            #
+            #    Parameter      Proxy header
+            #    -----------    ----------------
+            #    url            X-Ldap-URL
+            #    starttls       X-Ldap-Starttls
+            #    basedn         X-Ldap-BaseDN
+            #    binddn         X-Ldap-BindDN
+            #    bindpasswd     X-Ldap-BindPass
+            #    cookiename     X-CookieName
+            #    realm          X-Ldap-Realm
+            #    template       X-Ldap-Template
+
+            # (Required) Set the URL and port for connecting to the LDAP server,
+            # by replacing 'example.com'.
+            # Do not mix ldaps-style URL and X-Ldap-Starttls as it will not work.
+            #proxy_set_header X-Ldap-URL      "ldap://example.com";
+            # Address of Synology LDAP server 2020-06-29
+            proxy_set_header X-Ldap-URL      "ldap://<homenetwork>.20";
+
+            # (Optional) Establish a TLS-enabled LDAP session after binding to the
+            # LDAP server.
+            # This is the 'proper' way to establish encrypted TLS connections, see
+            # http://www.openldap.org/faq/data/cache/185.html
+            #proxy_set_header X-Ldap-Starttls "true";
+
+            # (Required) Set the Base DN, by replacing the value enclosed in
+            # double quotes.
+            #proxy_set_header X-Ldap-BaseDN   "cn=Users,dc=test,dc=local";
+            # Base DN as defined by Synology LDAP server
+            proxy_set_header X-Ldap-BaseDN   "<dc-list>";
+
+            # (Required) Set the Bind DN, by replacing the value enclosed in
+            # double quotes.
+            #proxy_set_header X-Ldap-BindDN   "cn=root,dc=test,dc=local";
+            # Bind DN as defined by Synology LDAP server
+            proxy_set_header X-Ldap-BindDN   "uid=root,cn=users,<dc-list>";
+
+            # (Required) Set the Bind password, by replacing 'secret'.
+            #proxy_set_header X-Ldap-BindPass "secret";
+            # Configured password in Synology LDAP server
+            proxy_set_header X-Ldap-BindPass "<password>";
+
+            # (Required) The following directives set the cookie name and pass
+            # it, respectively. They are required for cookie-based
+            # authentication. Comment them out if using HTTP basic
+            # authentication.
+            proxy_set_header X-CookieName "nginxauth";
+            proxy_set_header Cookie nginxauth=$cookie_nginxauth;
+
+            # (Required if using Microsoft Active Directory as the LDAP server)
+            # Set the LDAP template by uncommenting the following directive.
+            #proxy_set_header X-Ldap-Template "(sAMAccountName=%(username)s)";
+
+            # (May be required if using Microsoft Active Directory and
+            # getting "In order to perform this operation a successful bind
+            # must be completed on the connection." errror)
+            #proxy_set_header X-Ldap-DisableReferrals "true";
+
+            # (Optional if using OpenLDAP as the LDAP server) Set the LDAP
+            # template by uncommenting the following directive and replacing
+            # '(cn=%(username)s)' which is the default set in
+            # nginx-ldap-auth-daemon.py.
+            #proxy_set_header X-Ldap-Template "(cn=%(username)s)";
+
+            # (Optional) Set the realm name, by uncommenting the following
+            # directive and replacing 'Restricted' which is the default set
+            # in nginx-ldap-auth-daemon.py.
+            #proxy_set_header X-Ldap-Realm    "Restricted";
+        }
+    }
+
