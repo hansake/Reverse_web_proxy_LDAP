@@ -3,6 +3,16 @@ is copied from: https://github.com/nginxinc/nginx-ldap-auth
 
 The backend authentication script backend-auth-app.py is slightly modified.
 
+The code is installed on a Raspberry Pi 3 Model B with Rasbian 9 (stretch).
+
+Nginx was first installed:
+* sudo apt-get update
+* sudo apt-get install nginx-full
+
+Install needed software libraries:
+* sudo apt install libsasl2-dev libldap2-dev libssl-dev
+* sudo apt install python-ldap
+
 These files are installed to the directories with the following CLI commands:
 * sudo cp nginx-ldap-auth-daemon.py /usr/local/bin
 * sudo cp backend-auth-app.py /usr/local/bin
