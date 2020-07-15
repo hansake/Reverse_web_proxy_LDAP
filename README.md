@@ -11,3 +11,6 @@ The reverse web proxy with LDAP authentication was developed because the Safari 
 in iOS can't save and remember passwords when basic authentication is used on a web site.
 
 Basic authentication is used in the previous project: https://github.com/hansake/Reverse_web_proxy.
+
+To keep the certificate from Let's Encrypt automatically updated some additional configuration is needed,
+this will be described here shortly.
