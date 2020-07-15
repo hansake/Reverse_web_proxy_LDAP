@@ -9,9 +9,13 @@ Nginx was first installed:
 * sudo apt-get update
 * sudo apt-get install nginx-full
 
+Certificates were obtained by using Let's Encrypt: https://letsencrypt.org
+
 Install needed software libraries:
 * sudo apt install libsasl2-dev libldap2-dev libssl-dev
 * sudo apt install python-ldap
+
+The files has to be modified with the IP addresses, domain names and host names for the installation.
 
 These files are installed to the directories with the following CLI commands:
 * sudo cp nginx-ldap-auth-daemon.py /usr/local/bin
