@@ -13,4 +13,4 @@ in iOS can't save and remember passwords when basic authentication is used on a 
 Basic authentication is used in a previous project: https://github.com/hansake/Reverse_web_proxy.
 
 To keep the certificate from Let's Encrypt automatically updated some additional configuration is needed,
-this will be described here shortly.
+see certificate.
